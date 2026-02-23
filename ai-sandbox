@@ -40,15 +40,60 @@ case "$TOOL" in
   *)      echo "Unknown tool: $TOOL" >&2; usage ;;
 esac
 
-docker run --rm -it \
-  -v "${REPO_ROOT}/.git:${REPO_ROOT}/.git" \
-  -v "${WORKTREE_DIR}:${WORKTREE_DIR}" \
-  -v "${HOME}/.ssh:/home/sandbox/.ssh:ro" \
-  -v "${HOME}/.gitconfig:/home/sandbox/.gitconfig:ro" \
-  -v "${HOME}/.config/gh:/home/sandbox/.config/gh:ro" \
-  -v "${HOME}/.claude:/home/sandbox/.claude" \
-  ${ANTHROPIC_API_KEY:+-e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"} \
-  ${OPENAI_API_KEY:+-e OPENAI_API_KEY="${OPENAI_API_KEY}"} \
-  -w "${WORKTREE_DIR}" \
-  ai-sandbox \
-  -c "$CMD"
+BWRAP_ARGS=(
+  # システム領域を読み取り専用でマウント (/home を除く)
+  --ro-bind /usr /usr
+  --ro-bind /bin /bin
+  --ro-bind /sbin /sbin
+  --ro-bind /lib /lib
+  --ro-bind /lib64 /lib64
+  --ro-bind /etc /etc
+  --ro-bind /run /run
+  --dev /dev
+  --proc /proc
+  --tmpfs /tmp
+  --tmpfs /home
+)
+
+# 存在する場合のみマウントするシステムディレクトリ
+for dir in /opt /snap /nix /lib32; do
+  [[ -d "$dir" ]] && BWRAP_ARGS+=(--ro-bind "$dir" "$dir")
+done
+
+BWRAP_ARGS+=(
+  # HOME 配下: 必要なディレクトリのみ公開
+  --ro-bind "${HOME}/.local/share/mise" "${HOME}/.local/share/mise"
+  --ro-bind "${HOME}/.local/share/claude" "${HOME}/.local/share/claude"
+  --ro-bind "${HOME}/.local/bin" "${HOME}/.local/bin"
+  --ro-bind "${HOME}/.cargo" "${HOME}/.cargo"
+  --ro-bind "${HOME}/.gitconfig" "${HOME}/.gitconfig"
+  --ro-bind "${HOME}/.config/gh" "${HOME}/.config/gh"
+  --bind "${HOME}/.claude" "${HOME}/.claude"
+  --bind "${HOME}/.claude.json" "${HOME}/.claude.json"
+  --bind "${HOME}/.codex" "${HOME}/.codex"
+  --bind "${HOME}/.ssh" "${HOME}/.ssh"
+
+  # worktree と .git だけ書き込み可能
+  --bind "${WORKTREE_DIR}" "${WORKTREE_DIR}"
+  --bind "${REPO_ROOT}/.git" "${REPO_ROOT}/.git"
+
+  --share-net
+  --unshare-pid
+  --die-with-parent
+  --chdir "${WORKTREE_DIR}"
+  --setenv HOME "${HOME}"
+  --setenv ANTHROPIC_API_KEY "${ANTHROPIC_API_KEY:-}"
+  --setenv OPENAI_API_KEY "${OPENAI_API_KEY:-}"
+)
+
+# D-Bus ソケット (gh の keyring 認証に必要)
+if [[ -S "${XDG_RUNTIME_DIR:-}/bus" ]]; then
+  BWRAP_ARGS+=(--bind "${XDG_RUNTIME_DIR}/bus" "${XDG_RUNTIME_DIR}/bus")
+fi
+
+# SSH agent ソケット
+if [[ -n "${SSH_AUTH_SOCK:-}" && -S "$SSH_AUTH_SOCK" ]]; then
+  BWRAP_ARGS+=(--bind "$SSH_AUTH_SOCK" "$SSH_AUTH_SOCK")
+fi
+
+exec bwrap "${BWRAP_ARGS[@]}" bash -c "$CMD"
