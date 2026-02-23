@@ -35,7 +35,7 @@ fi
 
 case "$TOOL" in
   claude) CMD="claude --dangerously-skip-permissions" ;;
-  codex)  CMD="codex --full-auto" ;;
+  codex)  CMD="codex --dangerously-bypass-approvals-and-sandbox" ;;
   bash)   CMD="bash" ;;
   *)      echo "Unknown tool: $TOOL" >&2; usage ;;
 esac
@@ -65,7 +65,8 @@ BWRAP_ARGS+=(
   --ro-bind "${HOME}/.local/share/mise" "${HOME}/.local/share/mise"
   --ro-bind "${HOME}/.local/share/claude" "${HOME}/.local/share/claude"
   --ro-bind "${HOME}/.local/bin" "${HOME}/.local/bin"
-  --ro-bind "${HOME}/.cargo" "${HOME}/.cargo"
+  --ro-bind "${HOME}/.rustup" "${HOME}/.rustup"
+  --bind "${HOME}/.cargo" "${HOME}/.cargo"
   --ro-bind "${HOME}/.gitconfig" "${HOME}/.gitconfig"
   --ro-bind "${HOME}/.config/gh" "${HOME}/.config/gh"
   --bind "${HOME}/.claude" "${HOME}/.claude"
