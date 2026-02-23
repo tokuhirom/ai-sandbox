@@ -1,0 +1,53 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: ai-sandbox <branch> [claude|codex|bash]" >&2
+  exit 1
+}
+
+BRANCH="${1:?$(usage)}"
+TOOL="${2:-bash}"
+
+# .git のあるディレクトリを探す
+find_repo_root() {
+  local dir="$PWD"
+  while [[ "$dir" != "/" ]]; do
+    if [[ -d "$dir/.git" ]]; then
+      echo "$dir"
+      return
+    fi
+    dir="$(dirname "$dir")"
+  done
+  echo "Error: not in a git repository" >&2
+  exit 1
+}
+
+REPO_ROOT="$(find_repo_root)"
+WORKTREE_DIR="${REPO_ROOT}/.git/worktrees-sandbox/${BRANCH}"
+
+# worktree がなければ作成
+if [[ ! -d "$WORKTREE_DIR" ]]; then
+  echo "Creating worktree for branch '${BRANCH}'..."
+  git -C "$REPO_ROOT" worktree add "$WORKTREE_DIR" "$BRANCH" 2>/dev/null \
+    || git -C "$REPO_ROOT" worktree add -b "$BRANCH" "$WORKTREE_DIR"
+fi
+
+case "$TOOL" in
+  claude) CMD="claude --dangerously-skip-permissions" ;;
+  codex)  CMD="codex --full-auto" ;;
+  bash)   CMD="bash" ;;
+  *)      echo "Unknown tool: $TOOL" >&2; usage ;;
+esac
+
+docker run --rm -it \
+  -v "${REPO_ROOT}/.git:${REPO_ROOT}/.git" \
+  -v "${WORKTREE_DIR}:${WORKTREE_DIR}" \
+  -v "${HOME}/.ssh:/root/.ssh:ro" \
+  -v "${HOME}/.gitconfig:/root/.gitconfig:ro" \
+  -v "${HOME}/.config/gh:/root/.config/gh:ro" \
+  ${ANTHROPIC_API_KEY:+-e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"} \
+  ${OPENAI_API_KEY:+-e OPENAI_API_KEY="${OPENAI_API_KEY}"} \
+  -w "${WORKTREE_DIR}" \
+  ai-sandbox \
+  bash -c "$CMD"
