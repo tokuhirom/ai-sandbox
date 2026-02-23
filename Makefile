@@ -4,7 +4,7 @@ INSTALL_DIR := $(HOME)/.local/bin
 .PHONY: build install uninstall
 
 build:
-	docker build -t $(IMAGE_NAME) .
+	docker build --build-arg UID=$$(id -u) -t $(IMAGE_NAME) .
 
 install: build
 	install -d $(INSTALL_DIR)

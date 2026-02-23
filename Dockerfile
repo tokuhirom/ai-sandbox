@@ -22,14 +22,19 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     > /etc/apt/sources.list.d/github-cli.list \
     && apt-get update && apt-get install -y gh && apt-get clean
 
+# 非rootユーザー作成
+ARG UID=1000
+RUN userdel -r ubuntu 2>/dev/null || true \
+    && useradd -m -s /bin/bash -u "${UID}" sandbox
+USER sandbox
+WORKDIR /home/sandbox
+
 # mise
 RUN curl https://mise.run | sh
-ENV PATH="/root/.local/bin:${PATH}"
+ENV PATH="/home/sandbox/.local/bin:${PATH}"
 
 # Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-RUN rm -rf /var/lib/apt/lists/* /tmp/*
+ENV PATH="/home/sandbox/.cargo/bin:${PATH}"
 
 ENTRYPOINT ["bash"]

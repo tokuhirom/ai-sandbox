@@ -43,11 +43,12 @@ esac
 docker run --rm -it \
   -v "${REPO_ROOT}/.git:${REPO_ROOT}/.git" \
   -v "${WORKTREE_DIR}:${WORKTREE_DIR}" \
-  -v "${HOME}/.ssh:/root/.ssh:ro" \
-  -v "${HOME}/.gitconfig:/root/.gitconfig:ro" \
-  -v "${HOME}/.config/gh:/root/.config/gh:ro" \
+  -v "${HOME}/.ssh:/home/sandbox/.ssh:ro" \
+  -v "${HOME}/.gitconfig:/home/sandbox/.gitconfig:ro" \
+  -v "${HOME}/.config/gh:/home/sandbox/.config/gh:ro" \
+  -v "${HOME}/.claude:/home/sandbox/.claude" \
   ${ANTHROPIC_API_KEY:+-e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"} \
   ${OPENAI_API_KEY:+-e OPENAI_API_KEY="${OPENAI_API_KEY}"} \
   -w "${WORKTREE_DIR}" \
   ai-sandbox \
-  bash -c "$CMD"
+  -c "$CMD"
