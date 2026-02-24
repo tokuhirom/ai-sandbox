@@ -2,9 +2,15 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: ai-sandbox <branch> [claude|codex|bash] [args...]" >&2
+  echo "Usage: ai-sandbox [--set-window-title] <branch> [claude|codex|bash] [args...]" >&2
   exit 1
 }
+
+SET_WINDOW_TITLE=false
+if [[ "${1:-}" == "--set-window-title" ]]; then
+  SET_WINDOW_TITLE=true
+  shift
+fi
 
 BRANCH="${1:?$(usage)}"
 TOOL="${2:-bash}"
@@ -100,8 +106,8 @@ if [[ -n "${SSH_AUTH_SOCK:-}" && -S "$SSH_AUTH_SOCK" ]]; then
   BWRAP_ARGS+=(--bind "$SSH_AUTH_SOCK" "$SSH_AUTH_SOCK")
 fi
 
-# tmux のウィンドウ名をブランチ名に設定
-if [[ -n "${TMUX:-}" ]]; then
+# tmux のウィンドウ名をブランチ名に設定 (--set-window-title 指定時のみ)
+if [[ "$SET_WINDOW_TITLE" == true && -n "${TMUX:-}" ]]; then
   case "$TOOL" in
     claude) TMUX_PREFIX="cl" ;;
     codex)  TMUX_PREFIX="cx" ;;
