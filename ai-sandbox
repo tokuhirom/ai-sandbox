@@ -2,12 +2,14 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: ai-sandbox <branch> [claude|codex|bash]" >&2
+  echo "Usage: ai-sandbox <branch> [claude|codex|bash] [args...]" >&2
   exit 1
 }
 
 BRANCH="${1:?$(usage)}"
 TOOL="${2:-bash}"
+shift 2 2>/dev/null || shift $#
+EXTRA_ARGS=("$@")
 
 # .git のあるディレクトリを探す
 find_repo_root() {
@@ -31,12 +33,13 @@ if [[ ! -d "$WORKTREE_DIR" ]]; then
   echo "Creating worktree for branch '${BRANCH}'..."
   git -C "$REPO_ROOT" worktree add "$WORKTREE_DIR" "$BRANCH" 2>/dev/null \
     || git -C "$REPO_ROOT" worktree add -b "$BRANCH" "$WORKTREE_DIR"
+  git -C "$WORKTREE_DIR" submodule update --init --recursive
 fi
 
 case "$TOOL" in
-  claude) CMD="claude --dangerously-skip-permissions" ;;
-  codex)  CMD="codex --dangerously-bypass-approvals-and-sandbox" ;;
-  bash)   CMD="bash" ;;
+  claude) CMD_ARGS=("claude" "--dangerously-skip-permissions" "${EXTRA_ARGS[@]}") ;;
+  codex)  CMD_ARGS=("codex" "--dangerously-bypass-approvals-and-sandbox" "${EXTRA_ARGS[@]}") ;;
+  bash)   CMD_ARGS=("bash" "${EXTRA_ARGS[@]}") ;;
   *)      echo "Unknown tool: $TOOL" >&2; usage ;;
 esac
 
@@ -97,4 +100,14 @@ if [[ -n "${SSH_AUTH_SOCK:-}" && -S "$SSH_AUTH_SOCK" ]]; then
   BWRAP_ARGS+=(--bind "$SSH_AUTH_SOCK" "$SSH_AUTH_SOCK")
 fi
 
-exec bwrap "${BWRAP_ARGS[@]}" bash -c "$CMD"
+# tmux のウィンドウ名をブランチ名に設定
+if [[ -n "${TMUX:-}" ]]; then
+  case "$TOOL" in
+    claude) TMUX_PREFIX="cl" ;;
+    codex)  TMUX_PREFIX="cx" ;;
+    bash)   TMUX_PREFIX="sh" ;;
+  esac
+  tmux rename-window "${TMUX_PREFIX}:${BRANCH}"
+fi
+
+exec bwrap "${BWRAP_ARGS[@]}" "${CMD_ARGS[@]}"
