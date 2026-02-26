@@ -2,15 +2,19 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: ai-sandbox [--set-window-title] <branch> [claude|codex|bash] [args...]" >&2
+  echo "Usage: ai-sandbox [--set-window-title] [--recreate] <branch> [claude|codex|bash] [args...]" >&2
   exit 1
 }
 
 SET_WINDOW_TITLE=false
-if [[ "${1:-}" == "--set-window-title" ]]; then
-  SET_WINDOW_TITLE=true
-  shift
-fi
+RECREATE=false
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --set-window-title) SET_WINDOW_TITLE=true; shift ;;
+    --recreate)         RECREATE=true; shift ;;
+    *)                  break ;;
+  esac
+done
 
 BRANCH="${1:?$(usage)}"
 TOOL="${2:-bash}"
@@ -34,8 +38,25 @@ find_repo_root() {
 REPO_ROOT="$(find_repo_root)"
 WORKTREE_DIR="${REPO_ROOT}/.git/worktrees-sandbox/${BRANCH}"
 
+# --recreate: 既存 worktree を削除して作り直す
+if [[ "$RECREATE" == true && -d "$WORKTREE_DIR" ]]; then
+  echo "Removing existing worktree for branch '${BRANCH}'..."
+  git -C "$REPO_ROOT" worktree remove --force "$WORKTREE_DIR"
+  # ブランチも削除 (再作成時に origin の最新から作り直すため)
+  git -C "$REPO_ROOT" branch -D "$BRANCH" 2>/dev/null || true
+fi
+
 # worktree がなければ作成
 if [[ ! -d "$WORKTREE_DIR" ]]; then
+  # ブランチ作成元を origin の最新に合わせる
+  DEFAULT_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --short HEAD 2>/dev/null || echo "main")"
+  echo "Fetching origin/${DEFAULT_BRANCH}..."
+  if git -C "$REPO_ROOT" fetch origin "$DEFAULT_BRANCH" 2>/dev/null; then
+    git -C "$REPO_ROOT" update-ref "refs/heads/${DEFAULT_BRANCH}" "origin/${DEFAULT_BRANCH}" 2>/dev/null || true
+  else
+    echo "Warning: could not fetch from origin (offline?), using local state" >&2
+  fi
+
   echo "Creating worktree for branch '${BRANCH}'..."
   git -C "$REPO_ROOT" worktree add "$WORKTREE_DIR" "$BRANCH" 2>/dev/null \
     || git -C "$REPO_ROOT" worktree add -b "$BRANCH" "$WORKTREE_DIR"
