@@ -2,16 +2,18 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: ai-sandbox [--set-window-title] [--recreate] <branch> [claude|codex|bash] [args...]" >&2
+  echo "Usage: ai-sandbox [--set-window-title] [--recreate] [--dry-run] <branch> [claude|codex|bash] [args...]" >&2
   exit 1
 }
 
 SET_WINDOW_TITLE=false
 RECREATE=false
+DRY_RUN=false
 while [[ "${1:-}" == --* ]]; do
   case "$1" in
     --set-window-title) SET_WINDOW_TITLE=true; shift ;;
     --recreate)         RECREATE=true; shift ;;
+    --dry-run)          DRY_RUN=true; shift ;;
     *)                  break ;;
   esac
 done
@@ -102,8 +104,6 @@ BWRAP_ARGS+=(
   --bind "${HOME}/.claude" "${HOME}/.claude"
   --bind "${HOME}/.claude.json" "${HOME}/.claude.json"
   --bind "${HOME}/.codex" "${HOME}/.codex"
-  --bind "${HOME}/.ssh" "${HOME}/.ssh"
-
   # worktree と .git だけ書き込み可能
   --bind "${WORKTREE_DIR}" "${WORKTREE_DIR}"
   --bind "${REPO_ROOT}/.git" "${REPO_ROOT}/.git"
@@ -113,18 +113,23 @@ BWRAP_ARGS+=(
   --die-with-parent
   --chdir "${WORKTREE_DIR}"
   --setenv HOME "${HOME}"
-  --setenv ANTHROPIC_API_KEY "${ANTHROPIC_API_KEY:-}"
-  --setenv OPENAI_API_KEY "${OPENAI_API_KEY:-}"
 )
 
-# D-Bus ソケット (gh の keyring 認証に必要)
-if [[ -S "${XDG_RUNTIME_DIR:-}/bus" ]]; then
-  BWRAP_ARGS+=(--bind "${XDG_RUNTIME_DIR}/bus" "${XDG_RUNTIME_DIR}/bus")
-fi
-
-# SSH agent ソケット
-if [[ -n "${SSH_AUTH_SOCK:-}" && -S "$SSH_AUTH_SOCK" ]]; then
-  BWRAP_ARGS+=(--bind "$SSH_AUTH_SOCK" "$SSH_AUTH_SOCK")
+# GH_TOKEN: リポジトリごとの fine-grained token を読み込み
+GH_TOKENS_FILE="${HOME}/.config/ai-sandbox/gh_tokens"
+if [[ -f "$GH_TOKENS_FILE" ]]; then
+  FILE_PERMS="$(stat -c '%a' "$GH_TOKENS_FILE")"
+  if [[ "$FILE_PERMS" != "600" ]]; then
+    echo "Warning: ${GH_TOKENS_FILE} has permissions ${FILE_PERMS} (expected 600), skipping" >&2
+  else
+    while IFS=' ' read -r path token; do
+      [[ -z "$path" || "$path" == \#* ]] && continue
+      if [[ "$path" == "$REPO_ROOT" ]]; then
+        BWRAP_ARGS+=(--setenv GH_TOKEN "$token")
+        break
+      fi
+    done < "$GH_TOKENS_FILE"
+  fi
 fi
 
 # tmux のウィンドウ名をブランチ名に設定 (--set-window-title 指定時のみ)
@@ -135,6 +140,21 @@ if [[ "$SET_WINDOW_TITLE" == true && -n "${TMUX:-}" ]]; then
     bash)   TMUX_PREFIX="sh" ;;
   esac
   tmux rename-window "${TMUX_PREFIX}:${BRANCH}"
+fi
+
+# --dry-run: 設定内容を表示して終了
+if [[ "$DRY_RUN" == true ]]; then
+  echo "=== ai-sandbox configuration ==="
+  echo "Repository:  ${REPO_ROOT}"
+  echo "Branch:      ${BRANCH}"
+  echo "Worktree:    ${WORKTREE_DIR}"
+  echo "Tool:        ${TOOL}"
+  echo "GH_TOKEN:    $(grep -q -- '--setenv GH_TOKEN' <<< "${BWRAP_ARGS[*]}" && echo "set" || echo "(not set)")"
+  echo "Command:     ${CMD_ARGS[*]}"
+  echo ""
+  echo "=== bwrap command ==="
+  echo "bwrap ${BWRAP_ARGS[*]} ${CMD_ARGS[*]}"
+  exit 0
 fi
 
 exec bwrap "${BWRAP_ARGS[@]}" "${CMD_ARGS[@]}"
