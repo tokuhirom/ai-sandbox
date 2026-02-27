@@ -2,16 +2,18 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: ai-sandbox [--set-window-title] [--recreate] <branch> [claude|codex|bash] [args...]" >&2
+  echo "Usage: ai-sandbox [--set-window-title] [--recreate] [--dry-run] <branch> [claude|codex|bash] [args...]" >&2
   exit 1
 }
 
 SET_WINDOW_TITLE=false
 RECREATE=false
+DRY_RUN=false
 while [[ "${1:-}" == --* ]]; do
   case "$1" in
     --set-window-title) SET_WINDOW_TITLE=true; shift ;;
     --recreate)         RECREATE=true; shift ;;
+    --dry-run)          DRY_RUN=true; shift ;;
     *)                  break ;;
   esac
 done
@@ -102,8 +104,6 @@ BWRAP_ARGS+=(
   --bind "${HOME}/.claude" "${HOME}/.claude"
   --bind "${HOME}/.claude.json" "${HOME}/.claude.json"
   --bind "${HOME}/.codex" "${HOME}/.codex"
-  --bind "${HOME}/.ssh" "${HOME}/.ssh"
-
   # worktree と .git だけ書き込み可能
   --bind "${WORKTREE_DIR}" "${WORKTREE_DIR}"
   --bind "${REPO_ROOT}/.git" "${REPO_ROOT}/.git"
@@ -113,19 +113,8 @@ BWRAP_ARGS+=(
   --die-with-parent
   --chdir "${WORKTREE_DIR}"
   --setenv HOME "${HOME}"
-  --setenv ANTHROPIC_API_KEY "${ANTHROPIC_API_KEY:-}"
-  --setenv OPENAI_API_KEY "${OPENAI_API_KEY:-}"
+  --setenv GH_TOKEN "${GH_TOKEN:-}"
 )
-
-# D-Bus ソケット (gh の keyring 認証に必要)
-if [[ -S "${XDG_RUNTIME_DIR:-}/bus" ]]; then
-  BWRAP_ARGS+=(--bind "${XDG_RUNTIME_DIR}/bus" "${XDG_RUNTIME_DIR}/bus")
-fi
-
-# SSH agent ソケット
-if [[ -n "${SSH_AUTH_SOCK:-}" && -S "$SSH_AUTH_SOCK" ]]; then
-  BWRAP_ARGS+=(--bind "$SSH_AUTH_SOCK" "$SSH_AUTH_SOCK")
-fi
 
 # tmux のウィンドウ名をブランチ名に設定 (--set-window-title 指定時のみ)
 if [[ "$SET_WINDOW_TITLE" == true && -n "${TMUX:-}" ]]; then
@@ -135,6 +124,21 @@ if [[ "$SET_WINDOW_TITLE" == true && -n "${TMUX:-}" ]]; then
     bash)   TMUX_PREFIX="sh" ;;
   esac
   tmux rename-window "${TMUX_PREFIX}:${BRANCH}"
+fi
+
+# --dry-run: 設定内容を表示して終了
+if [[ "$DRY_RUN" == true ]]; then
+  echo "=== ai-sandbox configuration ==="
+  echo "Repository:  ${REPO_ROOT}"
+  echo "Branch:      ${BRANCH}"
+  echo "Worktree:    ${WORKTREE_DIR}"
+  echo "Tool:        ${TOOL}"
+  echo "GH_TOKEN:    $([[ -n "${GH_TOKEN:-}" ]] && echo "set" || echo "(not set)")"
+  echo "Command:     ${CMD_ARGS[*]}"
+  echo ""
+  echo "=== bwrap command ==="
+  echo "bwrap ${BWRAP_ARGS[*]} ${CMD_ARGS[*]}"
+  exit 0
 fi
 
 exec bwrap "${BWRAP_ARGS[@]}" "${CMD_ARGS[@]}"
