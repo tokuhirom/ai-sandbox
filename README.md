@@ -39,24 +39,16 @@ ai-sandbox --recreate fix-bug claude
 ai-sandbox --dry-run fix-bug claude
 ```
 
-## GH_TOKEN (リポジトリごとの GitHub トークン)
+## GH_TOKEN
 
-`~/.config/ai-sandbox/gh_tokens` にリポジトリパスとトークンのペアを記述すると、サンドボックス内に `GH_TOKEN` 環境変数として渡されます。
-
-```
-# 形式: <リポジトリの絶対パス> <token>
-/home/user/work/my-repo ghp_xxxxxxxxxxxx
-/home/user/work/other-repo ghp_yyyyyyyyyyyy
-```
-
-- ファイルのパーミッションは `600` である必要があります（それ以外は警告を出してスキップ）
-- `#` で始まる行はコメントとして無視されます
+ホスト環境の `GH_TOKEN` がサンドボックスに渡されます。`dotenvx` 等で `.env` から読み込む想定です。
 
 ```bash
-# ファイル作成例
-mkdir -p ~/.config/ai-sandbox
-touch ~/.config/ai-sandbox/gh_tokens
-chmod 600 ~/.config/ai-sandbox/gh_tokens
+# .env
+GH_TOKEN=ghp_xxxxxxxxxxxx
+
+# dotenvx 経由で起動
+dotenvx run -- ai-sandbox fix-bug claude
 ```
 
 ## 仕組み
@@ -74,6 +66,6 @@ chmod 600 ~/.config/ai-sandbox/gh_tokens
 
 ### 環境変数
 
-- `GH_TOKEN` — `gh_tokens` ファイルで設定した場合のみサンドボックスに渡される
+- `GH_TOKEN` — ホスト環境から渡される
 
 API キー (`ANTHROPIC_API_KEY` 等) は各ツールの設定ファイル (`~/.claude`, `.claude.json` 等) 経由でサンドボックスにマウントされます。

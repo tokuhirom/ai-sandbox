@@ -113,24 +113,8 @@ BWRAP_ARGS+=(
   --die-with-parent
   --chdir "${WORKTREE_DIR}"
   --setenv HOME "${HOME}"
+  --setenv GH_TOKEN "${GH_TOKEN:-}"
 )
-
-# GH_TOKEN: リポジトリごとの fine-grained token を読み込み
-GH_TOKENS_FILE="${HOME}/.config/ai-sandbox/gh_tokens"
-if [[ -f "$GH_TOKENS_FILE" ]]; then
-  FILE_PERMS="$(stat -c '%a' "$GH_TOKENS_FILE")"
-  if [[ "$FILE_PERMS" != "600" ]]; then
-    echo "Warning: ${GH_TOKENS_FILE} has permissions ${FILE_PERMS} (expected 600), skipping" >&2
-  else
-    while IFS=' ' read -r path token; do
-      [[ -z "$path" || "$path" == \#* ]] && continue
-      if [[ "$path" == "$REPO_ROOT" ]]; then
-        BWRAP_ARGS+=(--setenv GH_TOKEN "$token")
-        break
-      fi
-    done < "$GH_TOKENS_FILE"
-  fi
-fi
 
 # tmux のウィンドウ名をブランチ名に設定 (--set-window-title 指定時のみ)
 if [[ "$SET_WINDOW_TITLE" == true && -n "${TMUX:-}" ]]; then
@@ -149,7 +133,7 @@ if [[ "$DRY_RUN" == true ]]; then
   echo "Branch:      ${BRANCH}"
   echo "Worktree:    ${WORKTREE_DIR}"
   echo "Tool:        ${TOOL}"
-  echo "GH_TOKEN:    $(grep -q -- '--setenv GH_TOKEN' <<< "${BWRAP_ARGS[*]}" && echo "set" || echo "(not set)")"
+  echo "GH_TOKEN:    $([[ -n "${GH_TOKEN:-}" ]] && echo "set" || echo "(not set)")"
   echo "Command:     ${CMD_ARGS[*]}"
   echo ""
   echo "=== bwrap command ==="
