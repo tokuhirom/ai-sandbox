@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: ai-sandbox [--set-window-title] [--recreate] [--dry-run] <branch> [claude|codex|bash] [args...]" >&2
+  echo "Usage: ai-sandbox [--set-window-title] [--recreate] [--dry-run] <branch> [claude|codex|codex-fa|bash] [args...]" >&2
   exit 1
 }
 
@@ -67,9 +67,10 @@ fi
 
 case "$TOOL" in
   claude) CMD_ARGS=("claude" "--dangerously-skip-permissions" "${EXTRA_ARGS[@]}") ;;
-  codex)  CMD_ARGS=("codex" "--dangerously-bypass-approvals-and-sandbox" "${EXTRA_ARGS[@]}") ;;
-  bash)   CMD_ARGS=("bash" "${EXTRA_ARGS[@]}") ;;
-  *)      echo "Unknown tool: $TOOL" >&2; usage ;;
+  codex)     CMD_ARGS=("codex" "--dangerously-bypass-approvals-and-sandbox" "${EXTRA_ARGS[@]}") ;;
+  codex-fa)  CMD_ARGS=("codex" "--full-auto" "${EXTRA_ARGS[@]}") ;;
+  bash)      CMD_ARGS=("bash" "${EXTRA_ARGS[@]}") ;;
+  *)         echo "Unknown tool: $TOOL" >&2; usage ;;
 esac
 
 BWRAP_ARGS=(
@@ -119,9 +120,10 @@ BWRAP_ARGS+=(
 # tmux のウィンドウ名をブランチ名に設定 (--set-window-title 指定時のみ)
 if [[ "$SET_WINDOW_TITLE" == true && -n "${TMUX:-}" ]]; then
   case "$TOOL" in
-    claude) TMUX_PREFIX="cl" ;;
-    codex)  TMUX_PREFIX="cx" ;;
-    bash)   TMUX_PREFIX="sh" ;;
+    claude)    TMUX_PREFIX="cl" ;;
+    codex)     TMUX_PREFIX="cx" ;;
+    codex-fa)  TMUX_PREFIX="cf" ;;
+    bash)      TMUX_PREFIX="sh" ;;
   esac
   tmux rename-window "${TMUX_PREFIX}:${BRANCH}"
 fi
